@@ -1,0 +1,4 @@
+base_url = "not-a-url"
+exclude = []
+[content_types]
+blog = "src/lib/content"
