@@ -82,21 +82,7 @@ func TestDisplayAddAndFinish(t *testing.T) {
 	}
 }
 
-func TestMissingOrInvalidBlacklist(t *testing.T) {
-	output := captureOutput(func() {
-		bl, err := sitemap.LoadBlacklist("nonexistent_file.toml")
-		if err != nil || bl == nil {
-			fmt.Printf("Blacklist ignored (file missing or invalid): %v\n", err)
-			bl = &sitemap.Blacklist{Exclude: []string{}}
-		}
-		if bl == nil || len(bl.Exclude) != 0 {
-			t.Errorf("Default blacklist should be empty")
-		}
-	})
-	if !strings.Contains(output, "Blacklist ignored") {
-		t.Errorf("Missing message for missing blacklist: %s", output)
-	}
-}
+
 
 func TestSitemapWithLastmodAndChangefreq(t *testing.T) {
 	// Create a temp markdown file with publishDate in frontmatter

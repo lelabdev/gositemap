@@ -36,9 +36,9 @@ func TestCustomBlogContentDirFromConfig(t *testing.T) {
 	os.WriteFile(filepath.Join(customDir, "foo.md"), []byte(""), 0644)
 	cfgPath := filepath.Join(tmpRoot, "gositemap.toml")
 	os.WriteFile(cfgPath, []byte(`base_url = "https://mysite.com"
+exclude = []
 [content_types]
 blog = "`+customDir+`"
-exclude = []
 `), 0644)
 
 	cfg, err := sitemap.LoadConfig(cfgPath)
@@ -95,9 +95,9 @@ func TestIntegration_SvelteKitProject(t *testing.T) {
 	os.WriteFile(filepath.Join(blogDir, "bar.svx"), []byte("---\npublishDate: 2023-01-02\n---\n"), 0644)
 	// Create TOML config
 	toml := `base_url = "https://mysite.com"
+exclude = ["admin"]
 [content_types]
 blog = "` + blogDir + `"
-exclude = ["admin"]
 `
 	os.WriteFile(filepath.Join(tmpRoot, "gositemap.toml"), []byte(toml), 0644)
 	// Load config

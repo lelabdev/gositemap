@@ -92,7 +92,10 @@ Static pages: Finds all `+page.svelte` or `article.md` files in `src/routes/`
 
 Articles: Includes `.md` / `.svx` from `content_types` folders
 
-Exclusions: Ignores dynamic/param folders and anything in exclude
+Exclusions: Ignores dynamic/param folders and anything in `exclude`.
+
+  - If an exclusion starts with `/`, it's treated as a full path prefix (e.g., `/admin` excludes `/admin` and `/admin/users`).
+  - Otherwise, it matches any directory segment in the URL (e.g., `(flow)` excludes `/blog/(flow)/post`).
 
 lastmod: Uses `publishDate` (if found) or file mtime
 

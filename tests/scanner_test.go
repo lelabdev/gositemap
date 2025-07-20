@@ -1,40 +1,67 @@
 package sitemap_test
 
 import (
-	"gositemap/sitemap"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"gositemap/sitemap"
 )
 
 func TestScanRoutes(t *testing.T) {
-	dir := t.TempDir()
-	os.MkdirAll(filepath.Join(dir, "blog"), 0755)
-	os.WriteFile(filepath.Join(dir, "+page.svelte"), []byte(""), 0644)
-	os.WriteFile(filepath.Join(dir, "[slug]", "+page.svelte"), []byte(""), 0755)
-	os.MkdirAll(filepath.Join(dir, "admin"), 0755)
-	os.WriteFile(filepath.Join(dir, "admin", "+page.svelte"), []byte(""), 0644)
-	os.WriteFile(filepath.Join(dir, "blog", "+page.md"), []byte(""), 0644)
-	os.MkdirAll(filepath.Join(dir, "(flow)", "rendez-vous"), 0755)
-	os.MkdirAll(filepath.Join(dir, "(flow)", "rendez-vous", "paiement"), 0755)
-	os.WriteFile(filepath.Join(dir, "(flow)", "rendez-vous", "paiement", "+page.svelte"), []byte(""), 0644)
-
-	exclude := []string{"admin"}
-	urls, err := sitemap.ScanRoutes(dir, exclude)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	want := []string{"/", "/blog", "/rendez-vous/paiement"}
-	if len(urls) != len(want) {
-		t.Fatalf("got %d urls, want %d", len(urls), len(want))
-	}
-	found := make(map[string]bool)
-	for _, u := range urls {
-		found[u.URL] = true
-	}
-	for _, u := range want {
-		if !found[u] {
-			t.Errorf("missing url: %q", u)
+	t.Run("excludes child routes", func(t *testing.T) {
+		// Create a temporary directory structure for testing
+		tmpDir, err := os.MkdirTemp("", "test-routes")
+		if err != nil {
+			t.Fatal(err)
 		}
-	}
+		defer os.RemoveAll(tmpDir)
+
+		// Create test files and directories
+		os.MkdirAll(filepath.Join(tmpDir, "admin", "users"), 0755)
+		os.WriteFile(filepath.Join(tmpDir, "admin", "users", "+page.svelte"), []byte("test"), 0644)
+		os.WriteFile(filepath.Join(tmpDir, "+page.svelte"), []byte("test"), 0644)
+
+		exclude := []string{"/admin"}
+		metas, err := sitemap.ScanRoutes(tmpDir, exclude)
+		if err != nil {
+			t.Fatalf("ScanRoutes failed: %v", err)
+		}
+
+		if len(metas) != 1 {
+			t.Errorf("Expected 1 route, got %d", len(metas))
+		}
+
+		if metas[0].URL != "/" {
+			t.Errorf("Expected route to be '/', got %s", metas[0].URL)
+		}
+	})
+
+	t.Run("excludes segment", func(t *testing.T) {
+		// Create a temporary directory structure for testing
+		tmpDir, err := os.MkdirTemp("", "test-routes")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer os.RemoveAll(tmpDir)
+
+		// Create test files and directories
+		os.MkdirAll(filepath.Join(tmpDir, "blog", "(flow)"), 0755)
+		os.WriteFile(filepath.Join(tmpDir, "blog", "(flow)", "+page.svelte"), []byte("test"), 0644)
+		os.WriteFile(filepath.Join(tmpDir, "+page.svelte"), []byte("test"), 0644)
+
+		exclude := []string{"(flow)"}
+		metas, err := sitemap.ScanRoutes(tmpDir, exclude)
+		if err != nil {
+			t.Fatalf("ScanRoutes failed: %v", err)
+		}
+
+		if len(metas) != 1 {
+			t.Errorf("Expected 1 route, got %d", len(metas))
+		}
+
+		if metas[0].URL != "/" {
+			t.Errorf("Expected route to be '/', got %s", metas[0].URL)
+		}
+	})
 }

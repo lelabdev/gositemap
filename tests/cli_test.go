@@ -1,6 +1,7 @@
 package sitemap_test
 
 import (
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -56,9 +57,10 @@ func TestQuietOption(t *testing.T) {
 	tmp := t.TempDir()
 	bin := buildBinary(t, tmp)
 	// Write minimal config
-	os.WriteFile(filepath.Join(tmp, "gositemap.toml"), []byte("base_url = \"https://mysite.com\"\n[content_types]\nblog = \"src/lib/content\"\nexclude = []\n"), 0644)
-	os.MkdirAll(filepath.Join(tmp, "src/lib/content"), 0755)
-	os.WriteFile(filepath.Join(tmp, "src/lib/content", "foo.md"), []byte(""), 0644)
+	blogContentDir := filepath.Join(tmp, "src", "lib", "content")
+	os.MkdirAll(blogContentDir, 0755)
+	os.WriteFile(filepath.Join(blogContentDir, "foo.md"), []byte(""), 0644)
+	os.WriteFile(filepath.Join(tmp, "gositemap.toml"), []byte(fmt.Sprintf("base_url = \"https://mysite.com\"\n[content_types]\nblog = \"%s\"\n", strings.ReplaceAll(blogContentDir, "\\", "/"))), 0644)
 	cmd := exec.Command(bin, "--quiet", "--dry-run")
 	cmd.Dir = tmp
 	out, err := cmd.CombinedOutput()
@@ -76,7 +78,10 @@ func TestQuietOption(t *testing.T) {
 func TestInvalidBaseURL(t *testing.T) {
 	tmp := t.TempDir()
 	bin := buildBinary(t, tmp)
-	os.WriteFile(filepath.Join(tmp, "gositemap.toml"), []byte("base_url = \"not-a-url\"\n[content_types]\nblog = \"src/lib/content\"\nexclude = []\n"), 0644)
+	blogContentDir := filepath.Join(tmp, "src", "lib", "content")
+	os.MkdirAll(blogContentDir, 0755)
+	os.WriteFile(filepath.Join(blogContentDir, "foo.md"), []byte(""), 0644)
+	os.WriteFile(filepath.Join(tmp, "gositemap.toml"), []byte(fmt.Sprintf("base_url = \"not-a-url\"\n[content_types]\nblog = \"%s\"\n", strings.ReplaceAll(blogContentDir, "\\", "/"))), 0644)
 	cmd := exec.Command(bin)
 	cmd.Dir = tmp
 	out, err := cmd.CombinedOutput()
@@ -86,5 +91,4 @@ func TestInvalidBaseURL(t *testing.T) {
 	if !strings.Contains(string(out), "Invalid base_url") {
 		t.Errorf("missing error for invalid base_url: %s", out)
 	}
-	// Accept non-zero exit code as expected
 }
