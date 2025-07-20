@@ -43,8 +43,17 @@ func ScanRoutes(root string, exclude []string) ([]RouteMeta, error) {
 			url = "/"
 		}
 		for _, ex := range exclude {
-			if url == "/"+ex {
-				return nil
+			if strings.HasPrefix(ex, "/") {
+				if strings.HasPrefix(url, ex) {
+					return nil
+				}
+			} else {
+				parts := strings.Split(url, "/")
+				for _, part := range parts {
+					if part == ex {
+						return nil
+					}
+				}
 			}
 		}
 		// Get lastmod from file mtime

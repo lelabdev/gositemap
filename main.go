@@ -20,7 +20,6 @@ func main() {
 	opts := ParseCLI()
 
 	routesDir := "src/routes"
-	blacklistPath := "blacklist.toml"
 	outputPath := "static/sitemap.xml"
 
 	if _, err := os.Stat("gositemap.toml"); os.IsNotExist(err) {
@@ -32,12 +31,17 @@ func main() {
 			fmt.Println(Red + "Could not create gositemap.toml: " + ferr.Error() + Reset)
 			os.Exit(1)
 		}
-		f.WriteString("base_url = \"" + url + "\"\n\nblog_content_dir = \"src/lib/content\"\n\nexclude = [\n  \"/admin\",\n  \"/secret\"\n]\n")
+		f.WriteString("base_url = \"" + url + "\"\n\n# You can exclude routes from the sitemap here.\nexclude = [\n  \"/admin\",\n]\n\n# You can define content types that have frontmatter here.\n[content_types]\nblog = \"src/lib/content\"\n")
 		f.Close()
 		fmt.Println(Green + "Created gositemap.toml with your base URL." + Reset)
 	}
 
-	cfg, _ := sitemap.LoadConfig("gositemap.toml")
+	cfg, err := sitemap.LoadConfig("gositemap.toml")
+	if err != nil {
+		fmt.Println(Red+"Could not load gositemap.toml: "+err.Error()+Reset)
+		os.Exit(1)
+	}
+
 	base := "http://localhost"
 	if cfg != nil && cfg.BaseURL != "" {
 		base = cfg.BaseURL
@@ -62,12 +66,6 @@ func main() {
 		}
 		metas, _ := sitemap.ScanContent(dir, slug, freq)
 		allContent = append(allContent, metas...)
-	}
-
-	bl, err := sitemap.LoadBlacklist(blacklistPath)
-	if err != nil || bl == nil {
-		fmt.Printf(Yellow+"Blacklist ignored (file missing or invalid): %v"+Reset+"\n", err)
-		bl = &sitemap.Blacklist{Exclude: []string{}}
 	}
 
 	excludeList := []string{}

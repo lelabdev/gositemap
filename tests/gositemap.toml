@@ -1,4 +1,4 @@
 base_url = "not-a-url"
-exclude = []
+exclude = ["admin"]
 [content_types]
 blog = "src/lib/content"
