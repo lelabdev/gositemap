@@ -2,6 +2,7 @@ package sitemap
 
 import (
 	"encoding/xml"
+	"os"
 	"sort"
 	"strings"
 )
@@ -9,73 +10,87 @@ import (
 type urlset struct {
 	XMLName xml.Name `xml:"urlset"`
 	Xmlns   string   `xml:"xmlns,attr"`
-	URLs    []url    `xml:"url"`
+	URLs    []URL    `xml:"url"`
 }
-type url struct {
+type URL struct {
 	Loc        string `xml:"loc"`
 	LastMod    string `xml:"lastmod"`
 	ChangeFreq string `xml:"changefreq,omitempty"`
 }
 
-// GenerateSitemap takes base, routes, and content metas, sorts them, and generates the XML
-func GenerateSitemap(base string, routes []RouteMeta, content []ContentMeta) string {
-	var entries []url
+// LoadSitemap reads an XML sitemap file and returns its URLs.
+func LoadSitemap(path string) ([]URL, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	var us urlset
+	if err := xml.Unmarshal(data, &us); err != nil {
+		return nil, err
+	}
+	return us.URLs, nil
+}
 
-	// 1. Home
-	for _, r := range routes {
-		if r.URL == "/" {
-			entries = append(entries, url{
-				Loc:        strings.TrimRight(base, "/") + r.URL,
-				LastMod:    r.LastMod,
-				ChangeFreq: r.ChangeFreq,
-			})
+// GenerateSitemap takes base, routes, content metas, and existing URLs, sorts them, and generates the XML
+func GenerateSitemap(base string, routes []RouteMeta, content []ContentMeta, existingURLs []URL, overwriteExisting bool) string {
+	uniqueEntries := make(map[string]URL)
+
+	// If not overwriting, add existing URLs to the map first
+	if !overwriteExisting {
+		for _, u := range existingURLs {
+			uniqueEntries[u.Loc] = u
 		}
 	}
-	// 2. Main pages
-	mainPages := []string{"/blog", "/about", "/contact"}
-	for _, main := range mainPages {
-		for _, r := range routes {
-			if r.URL == main {
-				entries = append(entries, url{
-					Loc:        strings.TrimRight(base, "/") + r.URL,
-					LastMod:    r.LastMod,
-					ChangeFreq: r.ChangeFreq,
-				})
+
+	// Add new routes
+	for _, r := range routes {
+		loc := strings.TrimRight(base, "/") + r.URL
+		if existingURL, ok := uniqueEntries[loc]; ok && overwriteExisting {
+			// If overwriteExisting is true, update existing entry with new data
+			existingURL.LastMod = r.LastMod
+			existingURL.ChangeFreq = r.ChangeFreq
+			uniqueEntries[loc] = existingURL
+		} else if !ok { // Only add if not already present
+			uniqueEntries[loc] = URL{
+				Loc:        loc,
+				LastMod:    r.LastMod,
+				ChangeFreq: r.ChangeFreq,
 			}
 		}
 	}
-	// 3. Blog articles (sorted)
-	var blogArticles []url
+
+	// Add new content
 	for _, c := range content {
+		loc := strings.TrimRight(base, "/") + c.URL
 		cf := c.ChangeFreq
 		if cf == "" {
 			cf = "never"
 		}
-		blogArticles = append(blogArticles, url{
-			Loc:        strings.TrimRight(base, "/") + c.URL,
-			LastMod:    c.LastMod,
-			ChangeFreq: cf,
-		})
-	}
-	sort.Slice(blogArticles, func(i, j int) bool {
-		return blogArticles[i].Loc < blogArticles[j].Loc
-	})
-	entries = append(entries, blogArticles...)
-	// 4. Secondary pages (sorted, not in mainPages)
-	var secondary []url
-	for _, r := range routes {
-		if r.URL != "/" && !contains(mainPages, r.URL) && !strings.HasPrefix(r.URL, "/blog/") {
-			secondary = append(secondary, url{
-				Loc:        strings.TrimRight(base, "/") + r.URL,
-				LastMod:    r.LastMod,
-				ChangeFreq: r.ChangeFreq,
-			})
+
+		if existingURL, ok := uniqueEntries[loc]; ok && overwriteExisting {
+			// If overwriteExisting is true, update existing entry with new data
+			existingURL.LastMod = c.LastMod
+			existingURL.ChangeFreq = cf
+			uniqueEntries[loc] = existingURL
+		} else if !ok { // Only add if not already present
+			uniqueEntries[loc] = URL{
+				Loc:        loc,
+				LastMod:    c.LastMod,
+				ChangeFreq: cf,
+			}
 		}
 	}
-	sort.Slice(secondary, func(i, j int) bool {
-		return secondary[i].Loc < secondary[j].Loc
+
+	var entries []URL
+	for _, u := range uniqueEntries {
+		entries = append(entries, u)
+	}
+
+	// Sort entries by URL
+	sort.Slice(entries, func(i, j int) bool {
+		return entries[i].Loc < entries[j].Loc
 	})
-	entries = append(entries, secondary...)
+
 	us := urlset{
 		Xmlns: "http://www.sitemaps.org/schemas/sitemap/0.9",
 		URLs:  entries,
