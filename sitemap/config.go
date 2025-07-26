@@ -6,9 +6,14 @@ import (
 	"github.com/pelletier/go-toml/v2"
 )
 
+type Glob struct {
+	Paths []string `toml:"paths"`
+}
+
 type Config struct {
 	BaseURL      string            `toml:"base_url"`
 	Exclude      []string          `toml:"exclude"`
+	Glob         []Glob            `toml:"glob"`
 	ContentTypes map[string]string `toml:"content_types"`
 	ChangeFreq   map[string]string `toml:"changefreq"`
 }

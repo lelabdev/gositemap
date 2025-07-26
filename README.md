@@ -54,6 +54,13 @@ base_url = "https://yoursite.com"
 blog = "src/lib/content"
 portfolio = "src/lib/portfolio"
 
+# You can also use glob patterns to specify content directories.
+# The slug will be the basename of the directory.
+[[glob]]
+paths = [
+  "src/content/*"
+]
+
 [changefreq]
 blog = "weekly"
 portfolio = "monthly"

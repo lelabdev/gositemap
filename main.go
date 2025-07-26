@@ -5,6 +5,7 @@ import (
 	"gositemap/sitemap"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -38,7 +39,7 @@ func main() {
 
 	cfg, err := sitemap.LoadConfig("gositemap.toml")
 	if err != nil {
-		fmt.Println(Red+"Could not load gositemap.toml: "+err.Error()+Reset)
+		fmt.Println(Red + "Could not load gositemap.toml: " + err.Error() + Reset)
 		os.Exit(1)
 	}
 
@@ -66,6 +67,21 @@ func main() {
 		}
 		metas, _ := sitemap.ScanContent(dir, slug, freq)
 		allContent = append(allContent, metas...)
+	}
+
+	if cfg != nil {
+		for _, glob := range cfg.Glob {
+			for _, pattern := range glob.Paths {
+				dirs, err := filepath.Glob(pattern)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "Error matching glob pattern '%s': %v\n", pattern, err)
+					continue
+				}
+				for _, dir := range dirs {
+					addContent(dir, &allContent, cfg)
+				}
+			}
+		}
 	}
 
 	excludeList := []string{}
@@ -117,3 +133,24 @@ func main() {
 		fmt.Printf(Green+"Sitemap successfully generated (%d entries) in %s"+Reset+"\n", all, outputPath)
 	}
 }
+
+func addContent(dir string, allContent *[]sitemap.ContentMeta, cfg *sitemap.Config) {
+	fi, err := os.Stat(dir)
+	if err != nil || !fi.IsDir() {
+		return
+	}
+
+	slug := filepath.Base(dir)
+	freq := "never"
+	if cfg != nil && cfg.ChangeFreq != nil {
+		if f, ok := cfg.ChangeFreq[dir]; ok {
+			freq = f
+		} else if f, ok := cfg.ChangeFreq[slug]; ok {
+			freq = f
+		}
+	}
+	if metas, err := sitemap.ScanContent(dir, slug, freq); err == nil {
+		*allContent = append(*allContent, metas...)
+	}
+}
+
