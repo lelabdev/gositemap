@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"gositemap/sitemap"
+	"io"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -17,30 +18,28 @@ const (
 	Blue   = "\033[34m"
 )
 
-func main() {
-	opts := ParseCLI()
+func runApp(stdout, stderr io.Writer, args []string) error {
+	opts := ParseCLI(args)
 
 	routesDir := "src/routes"
 	outputPath := "static/sitemap.xml"
 
 	if _, err := os.Stat("gositemap.toml"); os.IsNotExist(err) {
-		fmt.Print(Yellow + "Config file 'gositemap.toml' not found. Please enter your website base URL (e.g. https://mysite.com): " + Reset)
+		fmt.Fprintf(stdout, Yellow+"Config file 'gositemap.toml' not found. Please enter your website base URL (e.g. https://mysite.com): "+Reset)
 		var url string
-		fmt.Scanln(&url)
+		fmt.Fscanln(os.Stdin, &url)
 		f, ferr := os.Create("gositemap.toml")
 		if ferr != nil {
-			fmt.Println(Red + "Could not create gositemap.toml: " + ferr.Error() + Reset)
-			os.Exit(1)
+			return fmt.Errorf(Red+"Could not create gositemap.toml: %w"+Reset, ferr)
 		}
 		f.WriteString("base_url = \"" + url + "\"\n\n# You can exclude routes from the sitemap here.\nexclude = [\n  \"/admin\",\n]\n\n# You can define content types that have frontmatter here.\n[content_types]\nblog = \"src/lib/content\"\n")
 		f.Close()
-		fmt.Println(Green + "Created gositemap.toml with your base URL." + Reset)
+		fmt.Fprintf(stdout, Green+"Created gositemap.toml with your base URL."+Reset+"\n")
 	}
 
 	cfg, err := sitemap.LoadConfig("gositemap.toml")
 	if err != nil {
-		fmt.Println(Red + "Could not load gositemap.toml: " + err.Error() + Reset)
-		os.Exit(1)
+		return fmt.Errorf(Red+"Could not load gositemap.toml: %w"+Reset, err)
 	}
 
 	base := "http://localhost"
@@ -50,8 +49,7 @@ func main() {
 	// Validate base_url
 	parsed, err := url.Parse(base)
 	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
-		fmt.Println(Red + "Invalid base_url in config: must be a valid URL (e.g. https://mysite.com)" + Reset)
-		os.Exit(1)
+		return fmt.Errorf(Red + "Invalid base_url in config: must be a valid URL (e.g. https://mysite.com)" + Reset)
 	}
 	base = strings.TrimRight(base, "/")
 
@@ -65,7 +63,11 @@ func main() {
 		if cfg != nil && cfg.ChangeFreq != nil && cfg.ChangeFreq[slug] != "" {
 			freq = cfg.ChangeFreq[slug]
 		}
-		metas, _ := sitemap.ScanContent(dir, slug, freq)
+		metas, err := sitemap.ScanContent(dir, slug, freq)
+		if err != nil {
+			fmt.Fprintf(stderr, "Error scanning content in %s: %v\n", dir, err)
+			continue
+		}
 		allContent = append(allContent, metas...)
 	}
 
@@ -74,7 +76,7 @@ func main() {
 			for _, pattern := range glob.Paths {
 				dirs, err := filepath.Glob(pattern)
 				if err != nil {
-					fmt.Fprintf(os.Stderr, "Error matching glob pattern '%s': %v\n", pattern, err)
+					fmt.Fprintf(stderr, "Error matching glob pattern '%s': %v\n", pattern, err)
 					continue
 				}
 				for _, dir := range dirs {
@@ -90,14 +92,28 @@ func main() {
 	}
 
 	// Pass excludeList to ScanRoutes
-	routes, _ := sitemap.ScanRoutes(routesDir, excludeList)
+	routes, err := sitemap.ScanRoutes(routesDir, excludeList)
+	if err != nil {
+		fmt.Fprintf(stderr, "Error scanning routes in %s: %v\n", routesDir, err)
+		return err // Or handle as appropriate
+	}
+
+	var existingURLs []sitemap.URL
+	if _, err := os.Stat(outputPath); err == nil {
+		loadedURLs, loadErr := sitemap.LoadSitemap(outputPath)
+		if loadErr != nil {
+			fmt.Fprintf(stderr, "Error loading existing sitemap: %v\n", loadErr)
+		} else {
+			existingURLs = loadedURLs
+		}
+	}
 
 	all := len(routes) + len(allContent)
-	if all == 0 {
+	if all == 0 && len(existingURLs) == 0 {
 		if !opts.Quiet {
-			fmt.Println(Yellow + "No page or article found, nothing to do." + Reset)
+			fmt.Fprintf(stdout, Yellow+"No page or article found, nothing to do."+Reset+"\n")
 		}
-		os.Exit(0)
+		return nil
 	}
 
 	for _, r := range routes {
@@ -107,31 +123,51 @@ func main() {
 				msg += ", changefreq: " + r.ChangeFreq
 			}
 			msg += ")" + Reset
-			fmt.Println(msg)
+			fmt.Fprintf(stdout, msg+"\n")
 		}
 	}
 	for _, meta := range allContent {
 		if !opts.Quiet {
-			fmt.Printf(Blue+"Detected article: %s (lastmod: %s, changefreq: %s)"+Reset+"\n", meta.URL, meta.LastMod, meta.ChangeFreq)
+			fmt.Fprintf(stdout, Blue+"Detected article: %s (lastmod: %s, changefreq: %s)"+Reset+"", meta.URL, meta.LastMod, meta.ChangeFreq)
 		}
 	}
 
+	// Determine if we should overwrite existing sitemap entries
+	overwriteExisting := false // Default to false (add only, preserve existing lastmod)
+	if cfg.PreserveExisting != nil && !*cfg.PreserveExisting { // If preserve_existing is explicitly false
+		overwriteExisting = true // Then we overwrite existing entries
+	}
+
 	// Pass changefreq config to sitemap.GenerateSitemap if needed
-	xml := sitemap.GenerateSitemap(base, routes, allContent)
+	xml := sitemap.GenerateSitemap(base, routes, allContent, existingURLs, overwriteExisting) // Pass new arg
 	if opts.DryRun {
 		if !opts.Quiet {
-			fmt.Println(Green + "--- DRY RUN: sitemap.xml output ---" + Reset)
+			fmt.Fprintf(stdout, Green+"--- DRY RUN: sitemap.xml output ---\n"+Reset)
 		}
-		fmt.Println(xml)
-		return
+		if !overwriteExisting { // If we are in "add only" mode
+			if _, err := os.Stat(outputPath); err == nil {
+				if !opts.Quiet {
+					fmt.Fprintf(stdout, Yellow+"Sitemap file already exists at %s. In dry run, new entries would be added, existing entries would be preserved.\n"+Reset, outputPath)
+                }
+                fmt.Fprintf(stdout, xml+"\n") // Still print the XML in dry run, but with the correct message
+                return nil // This line is restored
+            }
+        }
+        // If overwriteExisting is true, or no existing sitemap, just print the XML
+        fmt.Fprintf(stdout, xml+"\n")
+        return nil
 	}
+
+	// No longer need the `if shouldSkip { ... return nil }` block here
+	// The logic for preserving/overwriting is now inside GenerateSitemap
+
 	if err := os.WriteFile(outputPath, []byte(xml), 0644); err != nil {
-		fmt.Printf(Red+"Error writing sitemap: %v"+Reset+"\n", err)
-		os.Exit(1)
+		return fmt.Errorf(Red+"Error writing sitemap: %w"+Reset, err)
 	}
 	if !opts.Quiet {
-		fmt.Printf(Green+"Sitemap successfully generated (%d entries) in %s"+Reset+"\n", all, outputPath)
+		fmt.Fprintf(stdout, Green+"Sitemap successfully generated (%d entries) in %s"+Reset+"\n", all, outputPath)
 	}
+	return nil
 }
 
 func addContent(dir string, allContent *[]sitemap.ContentMeta, cfg *sitemap.Config) {
@@ -154,3 +190,9 @@ func addContent(dir string, allContent *[]sitemap.ContentMeta, cfg *sitemap.Conf
 	}
 }
 
+func main() {
+	if err := runApp(os.Stdout, os.Stderr, os.Args[1:]); err != nil {
+		fmt.Fprintf(os.Stderr, "Error in runApp: %v\n", err)
+		os.Exit(1)
+	}
+}

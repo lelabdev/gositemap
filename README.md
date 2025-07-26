@@ -42,6 +42,20 @@ static/sitemap.xml
 `--help`, `-h` Show help and example config, then exit
 `--dry-run` Output sitemap to stdout only
 `--quiet` Suppress logs except errors
+`preserve_existing` (in `gositemap.toml`) Controls how existing sitemap.xml files are handled.
+
+---
+
+## 🔄 Sitemap Overwrite Behavior (`preserve_existing`)
+
+GoSitemap offers flexible control over how it updates your `sitemap.xml` file:
+
+- **Default Behavior (or `preserve_existing = true` in `gositemap.toml`):**
+  If a `sitemap.xml` file already exists, GoSitemap will **add only new entries** to it. Existing entries (and their `<lastmod>` dates) will be preserved and *not* updated. This is ideal for incremental updates where you want to maintain historical `<lastmod>` values.
+
+- **Explicit Overwrite (`preserve_existing = false` in `gositemap.toml`):**
+  If `preserve_existing` is explicitly set to `false`, GoSitemap will **regenerate the entire `sitemap.xml` file**. All entries, including existing ones, will have their `<lastmod>` dates updated based on the current scan. Use this when you want a fresh sitemap reflecting the latest modification times for all content.
+
 
 ---
 
@@ -49,6 +63,7 @@ static/sitemap.xml
 
 ```toml
 base_url = "https://yoursite.com"
+preserve_existing = true # Set to false to overwrite all entries and update lastmod dates
 
 [content_types]
 blog = "src/lib/content"

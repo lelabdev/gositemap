@@ -12,13 +12,14 @@ type CLIOptions struct {
 	Help   bool
 }
 
-func ParseCLI() CLIOptions {
+func ParseCLI(args []string) CLIOptions {
 	opts := CLIOptions{}
-	flag.BoolVar(&opts.DryRun, "dry-run", false, "Print sitemap to stdout instead of writing to file")
-	flag.BoolVar(&opts.Quiet, "quiet", false, "Suppress all output except errors")
-	flag.BoolVar(&opts.Help, "help", false, "Show help and exit")
-	flag.BoolVar(&opts.Help, "h", false, "Show help and exit (shorthand)")
-	flag.Parse()
+	flagSet := flag.NewFlagSet("gositemap", flag.ExitOnError)
+	flagSet.BoolVar(&opts.DryRun, "dry-run", false, "Print sitemap to stdout instead of writing to file")
+	flagSet.BoolVar(&opts.Quiet, "quiet", false, "Suppress all output except errors")
+	flagSet.BoolVar(&opts.Help, "help", false, "Show help and exit")
+	flagSet.BoolVar(&opts.Help, "h", false, "Show help and exit (shorthand)")
+	flagSet.Parse(args)
 
 	if opts.Help {
 		printHelp()

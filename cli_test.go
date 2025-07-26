@@ -1,4 +1,4 @@
-package sitemap_test
+package main
 
 import (
 	"fmt"
@@ -12,13 +12,16 @@ import (
 
 func buildBinary(t *testing.T, tmpdir string) string {
 	binRoot := "gositemap-test-bin"
+	projectRoot := "/home/loops/1Dev/Projects/gositemap"
 	cmd := exec.Command("go", "build", "-o", binRoot, "main.go", "cli.go")
-	cmd.Dir = ".." // project root
+	cmd.Dir = projectRoot
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("failed to build binary: %v\n%s", err, out)
 	}
-	binSrc := filepath.Join("..", binRoot)
+	binSrc := filepath.Join(projectRoot, binRoot)
+
+
 	binTmp := filepath.Join(tmpdir, "gositemap-test-bin")
 	in, err := os.Open(binSrc)
 	if err != nil {
@@ -60,6 +63,8 @@ func TestQuietOption(t *testing.T) {
 	blogContentDir := filepath.Join(tmp, "src", "lib", "content")
 	os.MkdirAll(blogContentDir, 0755)
 	os.WriteFile(filepath.Join(blogContentDir, "foo.md"), []byte(""), 0644)
+	os.MkdirAll(filepath.Join(tmp, "src", "routes"), 0755)
+	os.WriteFile(filepath.Join(tmp, "src", "routes", "+page.svelte"), []byte(""), 0644)
 	os.WriteFile(filepath.Join(tmp, "gositemap.toml"), []byte(fmt.Sprintf("base_url = \"https://mysite.com\"\n[content_types]\nblog = \"%s\"\n", strings.ReplaceAll(blogContentDir, "\\", "/"))), 0644)
 	cmd := exec.Command(bin, "--quiet", "--dry-run")
 	cmd.Dir = tmp
@@ -67,7 +72,7 @@ func TestQuietOption(t *testing.T) {
 	if err != nil {
 		t.Fatalf("quiet+dry-run should exit 0, got %v", err)
 	}
-	if strings.Contains(string(out), "Detected") || strings.Contains(string(out), "Sitemap successfully generated") {
+	if strings.Contains(string(out), "Detected") || strings.Contains(string(out), "Sitemap successfully generated") || strings.Contains(string(out), "Sitemap file already exists at") {
 		t.Errorf("quiet should suppress logs, got: %s", out)
 	}
 	if !strings.Contains(string(out), "<urlset") {
